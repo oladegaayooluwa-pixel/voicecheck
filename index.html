@@ -1,0 +1,407 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>VoiceCheck: find AI-sounding sentences and rewrite them</title>
+<meta name="description" content="Free tool that highlights sentences that sound AI-written and rewrites them in a more natural voice. Up to 2,000 words per check.">
+<style>
+:root{--bg:#E8EEF1;--ink:#12212C;--muted:#566873;--line:#C6D2D9;--panel:#FFFFFF;--accent:#0B6E6E;--accent-ink:#FFFFFF}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,"Segoe UI",sans-serif;line-height:1.5}
+main{max-width:720px;margin:0 auto;padding:28px 16px 48px}
+header{margin-bottom:20px}
+h1{font-family:Georgia,"Iowan Old Style",serif;font-size:2rem;margin:0 0 6px;letter-spacing:-.01em}
+header p{margin:0;color:var(--muted);max-width:56ch}
+h2{font-family:Georgia,serif;font-size:1.25rem;margin:0 0 4px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px;margin-bottom:16px}
+.hidden{display:none!important}
+textarea{width:100%;border:1px solid var(--line);border-radius:6px;padding:12px;resize:vertical;font-family:Georgia,"Iowan Old Style",serif;font-size:1rem;line-height:1.65;color:var(--ink);background:#FAFCFD}
+textarea:focus{outline:2px solid var(--accent);outline-offset:1px}
+.row{display:flex;align-items:center;justify-content:space-between;gap:12px;margin-top:12px;flex-wrap:wrap}
+.actions{display:flex;gap:8px;align-items:center}
+.count{font-size:.875rem;color:var(--muted);font-variant-numeric:tabular-nums}
+.count.over{color:#B3261E;font-weight:600}
+button{font:inherit;cursor:pointer;border-radius:6px;padding:10px 16px;min-height:44px}
+button:focus-visible,.sent:focus-visible{outline:2px solid var(--accent);outline-offset:2px}
+.primary{background:var(--accent);color:var(--accent-ink);border:1px solid var(--accent);font-weight:600}
+.primary:disabled{background:#9FB9BA;border-color:#9FB9BA;cursor:not-allowed}
+.ghost{background:transparent;color:var(--ink);border:1px solid var(--line)}
+.ghost:hover{background:#F0F4F6}
+.ghost:disabled{opacity:.5;cursor:not-allowed}
+.note{font-size:.875rem;margin:10px 0 0;color:var(--muted)}
+.note.warn{color:#B3261E}
+.progress{margin-top:12px;font-size:.875rem;color:var(--muted)}
+.progress .bar{height:4px;background:var(--accent);border-radius:2px;transition:width .3s;margin-bottom:6px;width:0}
+.scorehead{display:flex;align-items:center;gap:20px;flex-wrap:wrap}
+.big{font-family:Georgia,serif;font-size:3rem;line-height:1;font-weight:700;font-variant-numeric:tabular-nums}
+.verdict{color:var(--muted);margin-top:4px}
+.meter{flex:1;min-width:140px;height:10px;background:#E3EAEE;border-radius:5px;overflow:hidden}
+.fill{height:100%;background:linear-gradient(90deg,#0B6E6E,#FFC400);transition:width .5s}
+.legend{display:flex;gap:16px;flex-wrap:wrap;margin:16px 0 8px;font-size:.8125rem;color:var(--muted)}
+.legend span{display:inline-flex;align-items:center;gap:6px}
+.sw{display:inline-block;width:18px;height:10px;border-radius:2px}
+.sw.strong{background:rgba(255,196,0,.6)}
+.sw.soft{background:rgba(255,196,0,.28)}
+.sw.none{background:#fff;border:1px solid var(--line)}
+.doc{font-family:Georgia,"Iowan Old Style",serif;font-size:1.0625rem;line-height:1.8;max-width:68ch}
+.doc p{margin:0 0 1em}
+.sent{cursor:pointer;border-radius:2px;padding:1px 0;-webkit-box-decoration-break:clone;box-decoration-break:clone}
+.sent.strong{background:rgba(255,196,0,.6)}
+.sent.soft{background:rgba(255,196,0,.28)}
+.sent.on{outline:2px solid var(--ink);outline-offset:1px}
+.why{background:#F3F7F9;border-left:3px solid var(--accent);padding:10px 12px;border-radius:0 6px 6px 0;margin:8px 0 0;font-size:.9375rem}
+.hint{color:var(--muted);font-size:.875rem;margin:8px 0 0}
+.revised{background:#F7FAFB;border:1px solid var(--line);border-radius:6px;padding:14px 14px 2px;margin-top:12px}
+footer{font-size:.8125rem;color:var(--muted);margin-top:8px;max-width:60ch}
+footer p{margin:0 0 8px}
+@media (max-width:480px){
+  main{padding:20px 12px 40px}
+  h1{font-size:1.65rem}
+  .big{font-size:2.4rem}
+  .row{flex-direction:column;align-items:stretch}
+  .actions{justify-content:space-between}
+  .actions button,.row>button{flex:1}
+}
+@media (prefers-reduced-motion:reduce){.fill,.progress .bar{transition:none}}
+</style>
+</head>
+<body>
+<main>
+  <header>
+    <h1>VoiceCheck</h1>
+    <p>Paste up to 2,000 words. See which sentences sound machine-made, then rewrite them in a more natural voice.</p>
+  </header>
+
+  <section class="panel">
+    <textarea id="input" rows="9" placeholder="Paste your text here…" aria-label="Text to check"></textarea>
+    <div class="row">
+      <span id="count" class="count">0 / 2,000 words</span>
+      <div class="actions">
+        <button id="sample" class="ghost" type="button">Try a sample</button>
+        <button id="clear" class="ghost hidden" type="button">Clear</button>
+        <button id="check" class="primary" type="button" disabled>Check text</button>
+      </div>
+    </div>
+    <p id="overNote" class="note warn hidden"></p>
+    <div id="progress" class="progress hidden" role="status">
+      <div id="bar" class="bar"></div>
+      <span id="progressText"></span>
+    </div>
+    <p id="error" class="note warn hidden" role="alert"></p>
+    <p id="allowance" class="note hidden"></p>
+  </section>
+
+  <section id="results" class="panel hidden">
+    <div class="scorehead">
+      <div>
+        <div id="score" class="big">0%</div>
+        <div id="verdict" class="verdict"></div>
+      </div>
+      <div class="meter" aria-hidden="true"><div id="fill" class="fill" style="width:0"></div></div>
+    </div>
+    <div class="legend">
+      <span><i class="sw strong"></i> Likely AI</span>
+      <span><i class="sw soft"></i> Possibly AI</span>
+      <span><i class="sw none"></i> Reads human</span>
+    </div>
+    <div id="doc" class="doc"></div>
+    <div id="why" class="why hidden"></div>
+    <p id="whyHint" class="hint">Tap a sentence to see why it scored that way.</p>
+    <div class="row">
+      <span id="flagged" class="count"></span>
+      <button id="rewrite" class="primary" type="button">Rewrite flagged sentences</button>
+    </div>
+    <p id="noFlags" class="note hidden">Nothing flagged. This text already reads naturally.</p>
+  </section>
+
+  <section id="revisedPanel" class="panel hidden">
+    <h2>Revised text</h2>
+    <p id="revisedHint" class="hint"></p>
+    <div id="revisedDoc" class="doc revised"></div>
+    <div class="row">
+      <button id="copy" class="ghost" type="button">Copy text</button>
+      <button id="recheck" class="primary" type="button">Re-check this version</button>
+    </div>
+  </section>
+
+  <footer>
+    <p>Scores are estimates from a language model. They are not Turnitin or any school's detector, and detectors often disagree or flag human writing. If you used AI on an assignment, follow your school's rules on disclosure.</p>
+    <p>Your text is sent to Google's Gemini API to be analysed. This site doesn't save it, but on Google's free tier your text may be used to improve Google's products, so don't paste anything private.</p>
+  </footer>
+</main>
+
+<script>
+(function () {
+  var MAX_WORDS = 2000, FLAG_AT = 50;
+  var SAMPLE = "In today's fast-paced digital landscape, it is important to note that technology plays a crucial role in shaping modern education. Moreover, students are increasingly leveraging digital tools to enhance their learning experience. Furthermore, these innovations offer numerous benefits, including improved accessibility, greater flexibility, and enhanced engagement.\n\nMy own school switched to tablets in 2019, and honestly the first semester was a mess. Half the class forgot their chargers, and our maths teacher kept losing the projector.\n\nIn conclusion, it is evident that technology will continue to transform education in profound ways, and it is essential for educators to adapt accordingly.";
+
+  var $ = function (id) { return document.getElementById(id); };
+  var show = function (id, on) { $(id).classList.toggle('hidden', !on); };
+  var state = { analysis: null, selected: null, busy: false, revised: '' };
+
+  function countWords(t) { t = t.trim(); return t ? t.split(/\s+/).length : 0; }
+
+  function parseText(text) {
+    var sentences = [], paras = [];
+    text.split(/\n+/).map(function (p) { return p.trim(); }).filter(Boolean).forEach(function (p, pi) {
+      var parts = (p.match(/[^.!?]+(?:[.!?]+["'\u201D\u2019)\]]*|$)\s*/g) || [p])
+        .map(function (s) { return s.trim(); }).filter(Boolean);
+      var idxs = [];
+      parts.forEach(function (s) {
+        idxs.push(sentences.length);
+        sentences.push({ text: s, para: pi });
+      });
+      paras.push(idxs);
+    });
+    return { sentences: sentences, paras: paras };
+  }
+
+  function chunk(arr, n) {
+    var out = [];
+    for (var i = 0; i < arr.length; i += n) out.push(arr.slice(i, i + n));
+    return out;
+  }
+
+  function api(path, items) {
+    return fetch(path, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ items: items })
+    }).then(function (res) {
+      return res.json().catch(function () { return {}; }).then(function (data) {
+        if (!res.ok) throw new Error(data.error || 'Something went wrong (' + res.status + ').');
+        if (typeof data.remaining === 'number') {
+          $('allowance').textContent = 'Free allowance left today: ' + data.remaining.toLocaleString('en-US') + ' words';
+          show('allowance', true);
+        }
+        return data.results || [];
+      });
+    });
+  }
+
+  function runPool(tasks, limit, onDone) {
+    var next = 0, done = 0, results = [];
+    function worker() {
+      if (next >= tasks.length) return Promise.resolve();
+      var k = next++;
+      return tasks[k]().then(function (r) {
+        results[k] = r; done++; onDone(done);
+        return worker();
+      });
+    }
+    var workers = [];
+    for (var w = 0; w < Math.min(limit, tasks.length); w++) workers.push(worker());
+    return Promise.all(workers).then(function () { return results; });
+  }
+
+  function flat(arr) { return [].concat.apply([], arr); }
+
+  function setBusy(on, label, total) {
+    state.busy = on;
+    $('input').disabled = on;
+    show('progress', on);
+    if (on) { $('bar').style.width = '0'; $('progressText').textContent = label + ' part 1 of ' + total; }
+    refresh();
+  }
+
+  function setProgress(label, done, total) {
+    $('bar').style.width = (total ? (done / total) * 100 : 0) + '%';
+    $('progressText').textContent = label + ' part ' + Math.min(done + 1, total) + ' of ' + total;
+  }
+
+  function showError(msg) {
+    $('error').textContent = msg || '';
+    show('error', !!msg);
+  }
+
+  function refresh() {
+    var words = countWords($('input').value);
+    var over = words > MAX_WORDS;
+    $('count').textContent = words.toLocaleString('en-US') + ' / 2,000 words';
+    $('count').classList.toggle('over', over);
+    if (over) {
+      $('overNote').textContent = 'That\u2019s ' + (words - MAX_WORDS).toLocaleString('en-US') + ' words over the limit. Trim the text or check it in two parts.';
+    }
+    show('overNote', over);
+    $('check').disabled = state.busy || !words || over;
+    $('rewrite').disabled = state.busy;
+    $('recheck').disabled = state.busy;
+    show('sample', !$('input').value && !state.busy);
+    show('clear', !!$('input').value && !state.busy);
+  }
+
+  function detect(source) {
+    showError('');
+    show('revisedPanel', false);
+    state.revised = '';
+    state.selected = null;
+    var parsed = parseText(source);
+    if (!parsed.sentences.length) return;
+    var groups = chunk(parsed.sentences.map(function (s, i) { return i; }), 12);
+    setBusy(true, 'Analysing', groups.length);
+    var tasks = groups.map(function (ids) {
+      return function () {
+        return api('/api/detect', ids.map(function (i) { return { i: i, text: parsed.sentences[i].text }; }));
+      };
+    });
+    runPool(tasks, 3, function (d) { setProgress('Analysing', d, groups.length); })
+      .then(function (results) {
+        var scores = {};
+        flat(results).forEach(function (r) { scores[r.i] = { s: r.s, r: r.r }; });
+        var weighted = 0, total = 0;
+        parsed.sentences.forEach(function (s, i) {
+          var w = countWords(s.text);
+          weighted += (scores[i] ? scores[i].s : 0) * w;
+          total += w;
+        });
+        state.analysis = { sentences: parsed.sentences, paras: parsed.paras, scores: scores, overall: total ? Math.round(weighted / total) : 0 };
+        renderResults();
+        $('results').scrollIntoView({ behavior: 'smooth' });
+      })
+      .catch(function (e) { showError(e.message); })
+      .then(function () { setBusy(false); });
+  }
+
+  function scoreOf(i) { var s = state.analysis.scores[i]; return s ? s.s : 0; }
+
+  function renderResults() {
+    var a = state.analysis;
+    show('results', true);
+    $('score').textContent = a.overall + '%';
+    $('fill').style.width = a.overall + '%';
+    $('verdict').textContent = a.overall < 25 ? 'Reads mostly human'
+      : a.overall < 55 ? 'Mixed: some parts sound machine-made' : 'Reads mostly AI-written';
+
+    var doc = $('doc');
+    doc.textContent = '';
+    a.paras.forEach(function (idxs) {
+      var p = document.createElement('p');
+      idxs.forEach(function (i) {
+        var s = scoreOf(i);
+        var span = document.createElement('span');
+        span.className = 'sent' + (s >= 70 ? ' strong' : s >= FLAG_AT ? ' soft' : '');
+        span.textContent = a.sentences[i].text;
+        span.tabIndex = 0;
+        span.setAttribute('role', 'button');
+        span.dataset.i = i;
+        span.addEventListener('click', function () { select(i); });
+        span.addEventListener('keydown', function (e) {
+          if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); select(i); }
+        });
+        p.appendChild(span);
+        p.appendChild(document.createTextNode(' '));
+      });
+      doc.appendChild(p);
+    });
+
+    var flagged = a.sentences.filter(function (s, i) { return scoreOf(i) >= FLAG_AT; }).length;
+    $('flagged').textContent = flagged + ' sentence' + (flagged === 1 ? '' : 's') + ' flagged';
+    $('rewrite').classList.toggle('hidden', flagged === 0);
+    show('noFlags', flagged === 0);
+    select(null);
+  }
+
+  function select(i) {
+    var a = state.analysis;
+    state.selected = (i === state.selected) ? null : i;
+    Array.prototype.forEach.call($('doc').querySelectorAll('.sent'), function (n) {
+      n.classList.toggle('on', state.selected !== null && Number(n.dataset.i) === state.selected);
+    });
+    if (state.selected === null) {
+      show('why', false); show('whyHint', true);
+    } else {
+      var sc = a.scores[state.selected] || { s: 0, r: '' };
+      var why = $('why');
+      why.textContent = '';
+      var strong = document.createElement('strong');
+      strong.textContent = sc.s + '% AI-like. ';
+      why.appendChild(strong);
+      why.appendChild(document.createTextNode(sc.r || 'No specific signal.'));
+      show('why', true); show('whyHint', false);
+    }
+  }
+
+  function rewrite() {
+    var a = state.analysis;
+    if (!a) return;
+    var flagged = a.sentences.map(function (s, i) { return i; }).filter(function (i) { return scoreOf(i) >= FLAG_AT; });
+    if (!flagged.length) return;
+    showError('');
+    var groups = chunk(flagged, 6);
+    setBusy(true, 'Rewriting', groups.length);
+    var tasks = groups.map(function (ids) {
+      return function () {
+        return api('/api/rewrite', ids.map(function (i) {
+          var item = { i: i, text: a.sentences[i].text };
+          if (i > 0) item.prev = a.sentences[i - 1].text.slice(0, 200);
+          return item;
+        }));
+      };
+    });
+    runPool(tasks, 3, function (d) { setProgress('Rewriting', d, groups.length); })
+      .then(function (results) {
+        var map = {}, changed = 0;
+        flat(results).forEach(function (r) { map[r.i] = r.t; changed++; });
+        state.revised = a.paras.map(function (idxs) {
+          return idxs.map(function (i) { return map[i] || a.sentences[i].text; }).join(' ');
+        }).join('\n\n');
+        renderRevised(changed);
+      })
+      .catch(function (e) { showError(e.message); })
+      .then(function () { setBusy(false); });
+  }
+
+  function renderRevised(changed) {
+    show('revisedPanel', true);
+    $('revisedHint').textContent = changed + ' sentence' + (changed === 1 ? '' : 's') + ' rewritten. Read it through and fix anything that doesn\u2019t sound like you.';
+    var box = $('revisedDoc');
+    box.textContent = '';
+    state.revised.split('\n\n').forEach(function (t) {
+      var p = document.createElement('p');
+      p.textContent = t;
+      box.appendChild(p);
+    });
+    $('revisedPanel').scrollIntoView({ behavior: 'smooth' });
+  }
+
+  function copyRevised() {
+    var done = function () {
+      $('copy').textContent = 'Copied';
+      setTimeout(function () { $('copy').textContent = 'Copy text'; }, 1800);
+    };
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(state.revised).then(done, fallback);
+    } else { fallback(); }
+    function fallback() {
+      var ta = document.createElement('textarea');
+      ta.value = state.revised;
+      document.body.appendChild(ta);
+      ta.select();
+      try { document.execCommand('copy'); } catch (e) {}
+      document.body.removeChild(ta);
+      done();
+    }
+  }
+
+  $('input').addEventListener('input', refresh);
+  $('sample').addEventListener('click', function () { $('input').value = SAMPLE; refresh(); });
+  $('clear').addEventListener('click', function () {
+    $('input').value = '';
+    state.analysis = null; state.revised = '';
+    show('results', false); show('revisedPanel', false); showError('');
+    refresh();
+  });
+  $('check').addEventListener('click', function () { detect($('input').value); });
+  $('rewrite').addEventListener('click', rewrite);
+  $('copy').addEventListener('click', copyRevised);
+  $('recheck').addEventListener('click', function () {
+    $('input').value = state.revised;
+    refresh();
+    detect(state.revised);
+  });
+  refresh();
+})();
+</script>
+</body>
+</html>

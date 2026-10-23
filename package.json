@@ -1,0 +1,7 @@
+{
+  "name": "voicecheck",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Free tool that highlights AI-sounding sentences and rewrites them in a more natural voice.",
+  "engines": { "node": ">=18" }
+}
